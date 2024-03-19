@@ -1,0 +1,518 @@
+---
+title: "Final Project"
+author: "RAK"
+date: "2023-12-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(caTools)
+library(ROCR)
+library(caret)
+library(tidyverse)
+library(corrplot)
+
+```
+
+```{r}
+#install.packages("pscl")
+library(pscl)
+```
+
+```{r}
+# Purpose of Analysis: 
+
+#Our data set looks at the churn rate of customers as the y, dependent variable. The inputs, the x variables that we are working with are customer ID, Age, Gender, Tenure, Usage Frequency, Support Calls, Payment delay, Subscription Type, contract length. The tenure is the length of time a customer has been with the company. Subscription type options are basic, standard premium. Contract length is monthly, annual, quarterly. So just based on these inputs we can probably expect that the longer the contract length, and the more expensive the subscription type, the less the likelihood for the customer to churn is. Of course, we cannot know for sure until we do further analysis. I hope to find and explore the inherent structure and patterns within the data. Unsupervised learning deals with unlabeled data, unlike supervised learning. I hope to separate data into clusters and learn about each independent variable and what groups they typically fall into. I want to discover patterns and explore the data in a means that I have not quite yet. 
+
+#Our goal of the project is to understand what leads a customer to churn. We clearly want our valued customers to stay with us as long as possible, and we want their experience to be wonderful. Therefore, we want to allocate our resources to the analysis of what may lead customers to no longer come to us for business. 
+
+```
+
+
+```{r}
+
+library(dendextend)
+library(tidyverse)
+df=read.csv("customer_churn.csv")
+getwd()
+data=read.csv("customer_churn.csv")
+data <- na.omit(data)
+str(data)
+head(data)
+summary(data)
+head(data)
+
+#to get a better sense of our data. 
+#Looking at Age, our median is 42, so we should take this into account moving froward. So, it seems we are working with people that have experience and well defined in their careers. As an assumption, they probably should have a good understanding of technology as it seems there are a lot of younger individuals, so for the most part, they shouldn’t be needing too many support calls. As for support calls, it seems as the median is around 6, which generally, is relatively high. Most people stay around 33 months. Usage frequency median is about 15 times per month. Payment delay median is about 19 days, which is not great, and we obviously would not like to do business with those that will not pay in time. Last interaction median is about 15 days, so on average we see our customers every 2 weeks. Also, the lowest amount spent by a customer is $100, so that means our lowest and most basic subscription type. 
+#Subscription type: Basic, standard and premium
+#Contract length: annual, monthly and quarterly
+
+```
+```{r}
+#note: we changed the variables that are characters to the following. We beleived it would be more effective for analysis purposes: 
+table(data$Churn)
+
+
+paste("The proportion of that is Churning: ",round(mean(data$Churn),2))
+
+data<- data %>%
+  mutate(Contract.Length = case_when(
+    Contract.Length == "Annual" ~ 1,
+    Contract.Length == "Monthly" ~ 2,
+    Contract.Length == "Quarterly" ~ 3,
+  ))
+data<- data %>%
+  mutate(Subscription.Type = case_when(
+    Subscription.Type == "Basic" ~ 1,
+    Subscription.Type == "Standard" ~ 2,
+    Subscription.Type == "Premium" ~ 3,
+  ))
+data<- data %>%
+  mutate(Gender = case_when(
+    Gender == "Male" ~ 1,
+    Gender == "Female" ~ 2,
+  ))
+
+head(data)
+
+```
+
+
+```{r}
+summary(data)
+```
+```{r}
+sum(data$Churn==1)
+```
+
+```{r}
+# did not churn is very close to churn. As a corporation, we would like the difference to be larger, we want the case of customers churning to be less frequent than not. We need to further analyze how we can possibly get the churn rate down. 
+sum(data$Churn==0)
+```
+
+```{r}
+sum(data$Payment.Delay== "19" & data$Churn==1)
+```
+```{r}
+#these people almost probably always churned because they could hardly afford our services. 
+sum(data$Payment.Delay== "25" & data$Churn==1)
+```
+```{r}
+sum(data$Payment.Delay== "10" & data$Churn==1)
+```
+```{r}
+sum(data$Contract.Length== "1" & data$Churn==1)
+```
+```{r}
+#monthly had the most churned, could also because most customers chose monthly so inherently more churned, we need to do further analysis to conclude anything for sure
+sum(data$Contract.Length== "2" & data$Churn==1)
+
+```
+```{r}
+sum(data$Contract.Length== "3" & data$Churn==1)
+
+```
+```{r}
+sum(data$Gender== "1" & data$Churn==1)
+
+```
+
+```{r}
+sum(data$Gender== "2" & data$Churn==1)
+#Female has the most that churned
+```
+
+```{r}
+sum(data$Subscription.Type== "1" & data$Churn==1)
+```
+```{r}
+sum(data$Subscription.Type== "2" & data$Churn==1)
+```
+```{r}
+sum(data$Subscription.Type== "3" & data$Churn==1)
+#premium had the least that churned, this makes sense considering this is the most expensive the customers assumingly like our services, and therefore, stay with our corporation
+```
+```{r}
+sum(data$Last.Interaction== "15" & data$Churn==1)
+```
+
+```{r}
+sum(data$Last.Interaction== "30" & data$Churn==1)
+#only slight increased change with a longer last interaction
+```
+
+DATA EXPLORATION
+
+```{r} 
+categorical_cols <- c("Gender", "Subscription.Type", "Contract.Length")
+
+# Create a loop to generate count plots for each categorical variable
+for (col in categorical_cols) {
+  # Create the count plot using ggplot2
+  bar_chart <- ggplot(data, aes(x = as.factor(data[[col]]), fill = as.factor(data[[col]]))) +
+    geom_bar() +
+    scale_fill_manual(values = c("magenta", "lightblue", "seagreen")) +
+    theme_minimal() +
+    labs(title = col)
+  
+  # Print the count plot
+  print(bar_chart)
+}
+
+#There are more female than male, and female does churn more quantity wise, so perhaps its not just female that churn more, it’s just because there are more occurrences of female
+
+#The most popular contract length is monthly, but this is also the highest churn rate. So just like gender, it may not be the fact that monthly leads to have a high churn rate, there could just be the fact that there are more instances of monthly contracts. 
+```
+```{r}
+#There are very few people under the age of 20 that we provide services to. Mostly they are the age range of 35-40 and 55-60. 
+library(ggplot2)
+
+# Set the figure size
+options(repr.plot.width = 10, repr.plot.height = 4)
+
+# Create a histogram using ggplot2
+hist <- ggplot(data, aes(x = Age, fill = stat(count))) +
+  geom_histogram(bins = 10, color = "lightblue", fill = "purple", alpha = 3) +
+  theme_minimal() +
+  labs(title = "Distribution by Age", x = "Age", y = "Values")
+
+# Print the histogram
+print(hist)
+```
+
+
+```{r}
+#Below is the correlation matrix, which shows that customerID, paymentdelay, tenure and gender have the highest correlation to churn. CustomerID for analysis purposes isn’t extremely useful, because it is just an identification number, it isn’t insight to anything that would benefit us for avoiding customers that churn or fix our practices. However, payment delay, tenure and perhaps even gender will be helpful in our analysis.  
+
+cormat<-data%>%select_if(is.numeric)%>%cor()
+library(corrplot)
+corrplot(cormat, method="number", type="upper",diag=FALSE)
+```
+
+
+
+```{r}
+#The box plots below provide helpful data. Considering tenure shows, that the median or churn rate is typically slightly lower (about 28 months), and the median for churn rate is about 40. As for usage frequency, for no churn, the median is higher than its counterpart. Which makes sense, the more they use our services, the less likely they are to end business with our firm. The support calls box plot shows that the higher the median of support calls, the more instances of the customer churning. This seems accurate, because, the more support calls, the more frustration, and difficulties with our product. Additionally, for the variable payment delay, it is rational that the higher the payment delay in days, the higher the churn rate. Lastly, regarding total spend, there isn’t much of a difference for those that churned vs those that did not. However, there is a slightly lower median for those that did churn, which makes sense, because the less amount of money spent with our service, the more they churned. However, I would expect this difference to be larger.
+
+numeric_cols <- c("Age", "Tenure", "Usage.Frequency", "Support.Calls", "Payment.Delay", "Total.Spend")
+
+# Set the plotting layout
+par(mfrow = c(2, 3))  # Create a 2x3 grid for 6 box plots
+
+# Create a loop to generate box plots for each numerical variable
+for (i in 1:length(numeric_cols)) {
+  column <- numeric_cols[i]
+  
+  # Create the box plot
+  boxplot(data[[column]] ~ data$Churn, 
+          main = paste("Box Plot of", column, "by Churn"),
+          xlab = "Churn", ylab = column,
+          col = c("blue", "red"))
+}
+
+```
+
+
+```{r}
+prop.table(table(data$Gender))
+prop.table(table(data$Subscription.Type))
+prop.table(table(data$Contract.Length))
+```
+REGRESSION
+
+```{r}
+#Gender (Male) -> The coefficient is approximately -0.64897. Considering it is negative, it just means that as churn goes up, the likelihood of being male decreases, meaning a negative correlation, which is different for female
+
+#Subscription Type (Premium, Standard and Basic) -> The Premium coefficient is approximately -0.09560. negative coefficient suggests that having a Premium subscription is associated with a lower likelihood of churning compared to Standard and Basic. Similarly, the Standard coefficient is approximately -0.03204 which is also negative. That shows the Standard subscription is also less associated to Basic.
+
+#Contract Length (Monthly, Quarterly and Yearly) -> The Monthly contract length coefficient is positive which just means that the longer the contract length, the more likely the customer churned. 
+
+set.seed(123)  # For reproducibility
+index <- createDataPartition(data$Churn, p = 0.7, list = FALSE)
+train_data <- data[index, ]
+test_data <- data[-index, ]
+
+
+
+reg1<-glm(Churn ~ as.factor(Gender) + as.factor(Subscription.Type) + as.factor(Contract.Length),data=train_data,family='binomial')
+summary(reg1)
+
+```
+```{r}
+#Besides last interaction, there are very low P values. And as we can see, accuracy increased from the previous regression, and r squared increased. 
+
+#Age -> The coefficient of age is approximately 0.009353. This positive coefficient suggests that as a customer's age increases by one unit, the churning also increases. In other words, it seems as though as a customer gets older, they may be more likely to churn, assuming all other variables are held constant, based on the regression performed. 
+
+#Tenure -> From the positive coefficient of the tenure, the longer the tenure, typically the more the customer left, and churned.  Which is interesting, are they getting sick of our company, or no longer need our services? You would think with a longer tenure, the more loyalty, and lower likelihood of churning. 
+
+#Total Spend -> The negative coefficient indicated that as the customer spending increases by one unit there is decrease in churning means. Therefore, based on the regression, it seems as though as total spending increases, the less likely a customer churns. This makes sense, if they are spending more with our company, they are more likely to appreciate it. 
+
+reg2<-glm(Churn ~ Age + Tenure + Usage.Frequency + Last.Interaction + Total.Spend,data=train_data,family='binomial')
+summary(reg2)
+
+```
+
+
+```{r}
+reg3<-glm(Churn ~ Age + as.factor(Gender) + as.factor(Subscription.Type)+ Tenure + Usage.Frequency + Last.Interaction + Contract.Length + Total.Spend,data=train_data,family='binomial')
+
+summary(reg3)
+
+#Regression 3 is the best thus far, as the AIC (Akaike Information Criterion) is a measure of model goodness-of-fit that penalizes models with a larger number of predictors. Lower AIC values indicate better-fitting models, and as seen above, regression 3 has the lowest AIC. 
+```
+DECISION TREE ANALYSIS
+
+Decision trees provide a clear and intuitive representation of decision rules. Each node represents a decision, in the case below, it is based on whether the individual customer is a male or female. The decision trees rank features based on their importance in making decisions. They capture interactions between variables and provide helpful insight to the dataset. 
+
+
+```{r}
+# Load necessary packages
+library(rpart)
+library(rpart.plot)
+
+
+tree<-rpart(Churn ~ Gender+Subscription.Type+Contract.Length, data=train_data, method="class",cp=0.05)
+rpart.plot(tree,digits=-2)
+
+tree2 = rpart(Churn ~ Age + Tenure + Usage.Frequency + Last.Interaction + Total.Spend,data=train_data, method="class",minbucket=20,cp=0.01)
+rpart.plot(tree2,digits=-2)
+
+
+tree3 = rpart(Churn ~ .-CustomerID,data=train_data, method="class",minbucket=50,cp=0.01)
+rpart.plot(tree3,digits=-2)
+
+test_data$pred = predict(tree, newdata = test_data, type="class")
+test_data$pred2 = predict(tree2, newdata = test_data, type="class")
+test_data$pred3 = predict(tree3, newdata = test_data, type="class")
+#test_data<-test.df%>%relocate(Churn,pred,pred2,pred3)
+head(test_data)
+tail(test_data)
+
+
+library(caret)
+cat("1st tree (using earnings):")
+confusionMatrix(test_data$pred,as.factor(test_data$Churn))
+
+cat("2nd tree (using six splits):")
+confusionMatrix(test_data$pred2,as.factor(test_data$Churn))
+
+cat("3rd tree (using nine splits):")
+confusionMatrix(test_data$pred3,as.factor(test_data$Churn))
+
+acc_tree <- sum(test_data$pred == test_data$Churn) / nrow(test_data)
+acc_tree2 <- sum(test_data$pred2 == test_data$Churn) / nrow(test_data)
+acc_tree3 <- sum(test_data$pred3 == test_data$Churn) / nrow(test_data)
+print(paste("Accuracy for tree:", round(acc_tree * 100, 2), "%"))
+print(paste("Accuracy for tree2:", round(acc_tree2 * 100, 2), "%"))
+print(paste("Accuracy for tree3:", round(acc_tree3 * 100, 2), "%"))
+
+#The first tree has modest accuracy and sensitivity, indicating that it predicts both positive and negative cases but not exceptionally well. The specificity is higher, meaning it performs better at correctly identifying negative cases. The Kappa value is relatively low, suggesting limited agreement beyond chance.
+
+#We used 6 splits in the second tree. The second tree shows improved accuracy and specificity compared to the first tree. However, sensitivity is lower, indicating that it's not as effective at identifying positive cases. The Kappa value is moderate, showing better agreement beyond chance compared to the first tree.
+
+#Based on the above analysis, the third tree demonstrates significantly higher accuracy and sensitivity compared to the first and second trees. It excels at both correctly identifying positive and negative cases. The Kappa value is very high, indicating a strong agreement beyond chance.
+
+
+```
+
+Comparative summary of trees:
+
+The third tree is the most accurate and has the highest sensitivity, making it highly effective at identifying both positive and negative cases. It also has a high Kappa value, signifying strong agreement beyond chance.
+The second tree shows improvements in accuracy and specificity compared to the first tree but has lower sensitivity.
+The first tree has modest accuracy, with moderate sensitivity and specificity, indicating that it predicts both classes but not as effectively as the other trees.
+In terms of overall performance, the third tree (using nine splits) stands out as the most accurate and sensitive model, making it a strong candidate for predictive purposes. The choice between the second and third trees depends on the specific trade-offs between sensitivity and specificity that are most relevant to your application.
+This is very similar to what we observed with regression analysis. With more variables, the more our model improved at predicting the outcome, and the greater the significance it had. 
+
+
+USUPERVISED LEARNING
+EXPLORATORY ANALYSIS
+CLUSTERING
+
+Exploratory analysis, unsupervised learning, reveals hidden patterns or structures within a dataset without any predefined labels or target variable. We can identify natural groupings through clustering, and we can further explore data. 
+
+At first, the clusters created didn’t tell us much and we were quite confused. We came to the realization that a lot of scatterplots with our data set didn’t necessarily work quite right because we had a lot of binomial variables. So therefore, finding the average would make our scatterplot much more beneficial and legible for someone that was just glancing at our analysis. 
+
+```{r}
+#The first scatterplot below, we looked at average total spend by gender. Focusing on how spending patterns vary by gender. Male seemed to be higher, which was good insight considering, they tended to churn less as seen earlier, compared to women. So, they tend to spend more, and churn less, meaning we should defiantly target males
+
+ggplot(df, aes(x=Age, y=Total.Spend, color=Gender)) +
+  stat_summary(fun=mean, geom="point", size=2)+
+  labs(x = "Age", y = "Average Total Spend") +
+  ggtitle("Average Total Spend by Gender") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = .5))
+```
+
+```{r}
+
+#This results below were rather unexpected; it seems as though the average total spend doesn’t really vary by the type of subscription. There is absolutely no trend, so it could be that the more the client pays for their subscription the less they spend. Which could maybe lead to our  corporation not even really needing all these subscription types, although of course, we would need further analysis to conclude this. 
+
+ggplot(df, aes(x=Age, y=Total.Spend, color=Subscription.Type)) +
+  stat_summary(fun=mean, geom="point", size=2)+
+  labs(x = "Age", y = "Average  Total Spend ") +
+  ggtitle("Average Total Spend by Subscription Type") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = .5))
+
+```
+```{r}
+#It appears with the lowest contract length, our customers tended to spend the most. It appears annual members, actually tended to spend less. Again, this could be a psychological thing, with a short contract, because it will end sooner, they will spend more while they have the contract. 
+
+ggplot(df, aes(x=Age, y=Total.Spend, color=Contract.Length)) +
+  stat_summary(fun=mean, geom="point", size=2)+
+  labs(x = "Age", y = "Average  Total Spend ") +
+  ggtitle("Average Total Spend by Contract Length Type") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = .5))
+```
+
+
+```{r}
+#females had the greatest average payment delay. This is unanticipated honestly. This could maybe tell us, that while committing to a contract with female, perhaps be aware that they may pay in a longer period, and perhaps set some sort of penalty for not paying. 
+
+
+ggplot(df, aes(x=Age, y=Payment.Delay, color=Gender)) +
+  stat_summary(fun=mean, geom="point", size=2)+
+  labs(x = "Age", y = "Average  Payment Delay ") +
+  ggtitle("Average Payment Delay by Gender") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = .5))
+```
+```{r}
+
+#Males tended to call the most for support. So here, we see that there is a benefit to having female’s customers, they may pay late, however, we extend less resources to them because they don’t call as much, and we do not have to hire as many support callers. 
+
+
+ggplot(df, aes(x=Age, y=Support.Calls, color=Gender)) +
+  stat_summary(fun=mean, geom="point", size=2)+
+  labs(x = "Age", y = "Average  Support Calls ") +
+  ggtitle("Average Support Calls by Gender") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = .5))
+```
+
+ 
+
+```{r}
+ggplot(df, aes(x=Age, y=Tenure, color=Gender)) +
+  stat_summary(fun=mean, geom="point", size=2)+
+  labs(x = "Age", y = "Average  Payment Delay ") +
+  ggtitle("Average Payment Delay by Gender") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = .5))
+```
+
+
+```{r}
+
+#Males tended to call the most for support. So here, we see that there is a benefit to having female’s customers, they may pay late, however, we extend less resources to them because they don’t call as much, and we do not have to hire as many support callers. 
+
+ggplot(df, aes(x=Age, y=Support.Calls, color=Gender)) +
+  stat_summary(fun=mean, geom="point", size=2)+
+  labs(x = "Age", y = "Average  Support Call ") +
+  ggtitle("Average Support Call by Gender") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = .5))
+```
+Our reason for choosing cluster analysis for unsupervised learning: WE chose this because it provided a conceptual and visually appealing outcome. We could see clusters or groups of data points, and we were able to understand how various indicators impact the churn rate. It is also very useful when discovering natural groupings within the data. Also, Churn rate can be described by a variety of features that when combined, lead to a customer leaving. Cluster analysis gave us wonderful insights and ideas on how to change as a corporation. 
+
+
+```{r}
+#there is a huge drop at 2 and then from there on, the drop is very minimal, meaning that the time it takes to run, it may not make snese to do much more than 2 or 3 clusters. 
+
+iss <- function(k) {
+  kmeans(data %>% select_if(is.numeric),k,iter.max=500,nstart=100,algorithm="Lloyd" )$tot.withinss
+}
+k.values <- 1:10
+iss_values <- map_dbl(k.values, iss)
+
+plot(k.values, iss_values,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total intra-clusters sum of squares")
+```
+
+```{r}
+#We are seeing a very similar idea. Either way, 95% variance explained is great, so looking at this, I say not much more than 2 or 3. The change from two-3 is also rather minimal
+total_ss <- sum((df %>% select_if(is.numeric) - colMeans(df %>% select_if(is.numeric)))^2)
+
+# Modified function to return percentage of variance explained
+iss <- function(k) {
+  wss <- kmeans(data %>% select_if(is.numeric), k, iter.max=500, nstart=100, algorithm="Lloyd")$tot.withinss
+  return(1 - wss / total_ss)
+}
+
+# Rest of the code remains similar
+k.values <- 1:10
+perc_variance <- map_dbl(k.values, iss)
+
+plot(k.values, perc_variance,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Percentage of Variance Explained")
+```
+
+
+```{r}
+#we decided on two clusters, with the size around 32,000
+#
+?kmeans
+k5<-kmeans(data %>% select_if(is.numeric),2,iter.max=100,nstart=100)
+df$ClusterNumber <- k5$cluster
+k5
+```
+
+
+```{r}
+
+ggplot(data,aes(x=Age,y=Total.Spend,color=as.factor(k5$cluster)))+ stat_summary(fun=mean, geom="point", size=2)+
+       labs(x = "Age", y = "Total Spend ") +
+  ggtitle("Scatterplot") + theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))
+#  scale_color_manual(values = c("0" = "white", "1" = "lightblue")) 
+
+
+
+ggplot(data,aes(x=Payment.Delay,y=Support.Calls,color=as.factor(k5$cluster)))+stat_summary(fun=mean, geom="point", size=2)+
+       labs(x = "Payment Delay", y = "Support Calls") +
+  ggtitle("Scatterplot") + theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))
+#  scale_color_manual(values = c("0" = "white", "1" = "lightblue")) 
+
+
+ggplot(data,aes(x=Age,y=Payment.Delay,color=as.factor(k5$cluster)))+ stat_summary(fun=mean, geom="point", size=2)+
+       labs(x = "Age", y = "Payment Delay") +
+  ggtitle("Scatterplot") + theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(data,aes(x=Tenure,y=Usage.Frequency,color=as.factor(k5$cluster)))+ stat_summary(fun=mean, geom="point", size=2)+
+       labs(x = "Tenure", y = "Usage Frequency") +
+  ggtitle("Scatterplot") + theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+Thoughts about the above scatterplots: 
+
+First Scatterplot: 
+The group with the higher Churn rate (group 1), tended to spend less. The ones that spent the most were in the group with the lower Churn (group 2), meaning the group that churned less. 
+
+Second Scatterplot: 
+The group with more support calls, had a higher churn rate. Of course, this makes quite a lot of sense, no one wants to have to take time out of their day to call the corporation for any type of technological or payment issue. Just like we don’t have to hire those people (as much as we love their commitment to our corporation), but we would rather allocate money elsewhere. The more they must call, the less they want to spend money at our corporation. This shows, that from the front end we should really continue to try our best to avoid any issues during the process of interacting with our company
+
+Third Scatterplot: 
+In this scatterplot it shows that those that have a higher payment delay, have a higher churn rate. Also, that is good for us because don’t want to provide our servicing and resources to people that hardly pay us or delay their payments for a long period of time. 
+
+Fourth Scatterplot: 
+What I found to be interesting about this scatterplot, is the fact that usage frequency for group 2, which has a lower churn, stays pretty consistent, and the tenure doesn’t. Meanwhile, for Group 1, with a higher churn rate, we see that the only object that is different from group 2, is that the usage frequency is lower. 
+
+Final Thoughts: 
+
+Looking at our data and analysis in general, we can conclude that there is a promising prevalence of our independent variables impacting our dependent variables. We also can gather very important and useful insights from our collections. Totals spend, typically payment delay, support calls, usage frequency, tenure and even gender surprisingly all impact the churn outcome. The more one spends, the less likely to churn, the more support calls the more likely to churn, the more usage, the less likely to churn. Tenure seems to not necessarily have a major impact, except for the fact looking at our outcome, it almost seemed as though, the longer the ten years, the more churned. Surprisingly, our efforts and marketing tactics should be more targeted toward men, as they churn less frequently, often spend more, and have less payment delay. We even learned about spending habits per contract length. With a monthly contract length, the shortest, customers tended to spend the most. 
+
+Utilizing the data collected, we can conclude, that we should essentially focus on the most imperative individual variables. We should not sell the individuals who have any type of payment delay, especially those above 16 days. This could also include doing some type of credit check, because the more delayed the higher the churn. Additionally, we should look at support calls, as that typically impacts churning. We could try to make our interface easier to work with, and make sure our support call professionals are trained and very pleasant to talk to. 
+
+
