@@ -1,0 +1,122 @@
+---
+title: "FinalExam"
+author: "BobCompanyAnalyticsTeam"
+format: html
+editor: visual
+---
+
+## Bob's new role: Chief Analytics Officer
+
+Six months after struggling with a supermarket dataset to land a consultant job, Bob was now CAO (Chief Analytical Officer) at the firm. It was the least he deserved after all his hard work and how much he learned, he thought.
+
+Now, he no longer needed to do the analysis himself, he just had to evaluate the work of others, something much more fitting to his MBA skills. Below, you will find several examples of the analysis Bob has assessed, you will be asked to reflect on his assessment and to complement the analysis when neccesary.
+
+### Assessing risk (criminality) by US State
+
+**Tasked with developing a classification criterion for US States according to their crime indicators,** one of the analyst under his charge conducted a cluster analysis. Since Bob knew an unsupervised learning have no given objective, Bob asked the analyst to redo the analysis using a classification method to properly assess if the state should be classified as dangerous or not.
+
+**Question 1: Do you agree with Bob's assessment? Which purpose can cluster analysis serve in this scenario?**
+
+```{r}
+# Load necessary libraries
+library(tidyverse)
+#US Arrest dataset is built into R:
+data("USArrests")
+head(USArrests)
+summary(USArrests)
+cat("Murder, Assault and Rape value represent the number of cases per 100,000 habitants. \n")
+
+cat("UrbanPop is the percentage of the population living in urban areas. \n")
+# Scatterplot matrix
+pairs(USArrests, pch = 16, col = "blue")
+
+set.seed(12142023)
+# k-means clustering with 3 clusters
+scaled_data <- scale(USArrests)
+
+
+kmeans_model <- kmeans(scaled_data, centers = 3, nstart = 20)
+
+# Visualize the clusters on the scatterplot matrix
+pairs(USArrests, pch = 16, col = kmeans_model$cluster + 1)
+```
+
+I agree with Bob's assessment to some extent. While cluster analysis is a powerful tool for unsupervised learning and can reveal interesting patterns in data, it is not well-suited for classification tasks like determining whether a state situation in crime is high or low.
+
+One of the things that bothered him the most was that the analysis contained two scatterplots which were almost identical, as shown when putting them side to side. Although scatterplots were great for initial exploration, they were not fit for showing an analysis results, he pointed out.
+
+**Question 2: Is it true that scatterplots cannot be used to display analysis results? What, if any, insights do you get from the second scatterplot that you cannot get from the first one?**
+
+No, it's not true that scatterplots cannot be used to display analysis results. Scatterplots are powerful and widely used tools for visualizing relationships between two continuous variables. They are particularly useful for identifying patterns, trends, clusters, and outliers in your data. However, the effectiveness of scatterplots depends on the nature of your analysis and the type of data you have. 
+
+The first Scatter plot shows the correlation between the variables where as the second one shows the 3 Clusters with 3 different colors and there correlations.
+
+**Question 3: Verify if k=3 was the right parameter for training the clusters and use an alternative if you feel there is a better option (don't overspend time on finding alternatives if k=3 seems to work well). Justify your final choice.**
+
+```{r}
+# Don't just outline what you would do (!) Do it! Careful with time though. 
+
+iss <- function(k) {
+  kmeans(data %>% select_if(is.numeric),k,iter.max=500,nstart=100,algorithm="Lloyd" )$tot.withinss
+}
+k.values <- 1:10
+iss_values <- map_dbl(k.values, iss)
+
+plot(k.values, iss_values,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total intra-clusters sum of squares")
+
+```
+
+k = 3 is not the correct choice since the elbow plot is showing to form 5 clusters.
+
+**Question 4: Using the approach that you selected in Question 3, which US States would be characterized as the riskiest (by criminality)? What do they have in common?**
+
+```{r}
+
+
+calculate_inertia <- function(k) {
+  kmeans_result <- kmeans(scaled_data, centers = k, nstart = 25)
+  return(kmeans_result$tot.withinss)
+}
+
+# Set the chosen k value
+chosen_k <- 5
+
+# Train the k-means model with the chosen number of clusters
+kmeans_model <- kmeans(scaled_data, centers = chosen_k, nstart = 25)
+
+
+
+# Visualize 
+pairs(USArrests, pch = 16, col = kmeans_model$cluster + 1, 
+      main = "Scatterplot Matrix with Cluster Labels")
+
+# Add legend
+legend("topright", legend = levels(factor(kmeans_model$cluster)), 
+       col = rainbow(length(levels(factor(kmeans_model$cluster)))), 
+       pch = 16, title = "Clusters")
+
+
+
+# Get the names of the states in the riskiest cluster
+riskiest_cluster <- which.max(table(kmeans_model$cluster))
+riskiest_states <- row.names(USArrests[kmeans_model$cluster == riskiest_cluster, ])
+
+# Print the names of the riskiest states
+cat("Riskiest States based on Criminality (Cluster", riskiest_cluster, "):\n")
+print(riskiest_states)
+```
+
+```{r}
+
+kmeans_model$cluster
+# Plot a graph showing the distribution of clusters
+barplot(table(kmeans_model$cluster), col = rainbow(chosen_k),
+        main = "Cluster Distribution", xlab = "Cluster", ylab = "Frequency")
+
+
+
+
+```
