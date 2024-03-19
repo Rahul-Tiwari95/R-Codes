@@ -1,0 +1,395 @@
+---
+title: "World Population"
+author: "Dwayne Lobo"
+date: "2023-12-03"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(caTools)
+library(ROCR)
+library(caret)
+library(tidyverse)
+library(corrplot)
+
+```
+
+
+```{r}
+#getwd()
+#setwd("C:/Users/dell/Downloads")
+data <- read.csv("Demographic.csv",stringsAsFactors = TRUE)
+data <- na.omit(data)
+columns_to_drop <- c("Notes", "ISO3_code", "ISO2_code", "SDMX_code", "LocTypeID", "ParentID", "VarID", "LocID")
+data <- data[, -which(names(data) %in% columns_to_drop)]
+head(data)
+
+```
+
+
+```{r}
+summary(data)
+```
+
+
+
+
+```{r}
+selected_columns <- data[, 5:20]
+library(corrplot)
+cor_matrix <- cor(selected_columns)
+
+# Plot the correlation matrix using corrplot
+corrplot(cor_matrix, method = "color", type = "upper", order = "hclust")
+```
+Positive correlations 
+Total population (Male and Female included) is strongly positively correlated to NatChange 
+Number of births are directly proportional to the total population of the world 
+
+Negative Correlation 
+The population growth rate is inversely proportional to Time
+CBR is inversely proportional to PopDensity
+```{r}
+selected_columns <- data[, 20:40]
+library(corrplot)
+cor_matrix <- cor(selected_columns)
+
+# Plot the correlation matrix using corrplot
+corrplot(cor_matrix, method = "color", type = "upper", order = "hclust")
+```
+
+```{r}
+selected_columns <- data[, 40:59]
+library(corrplot)
+cor_matrix <- cor(selected_columns)
+
+# Plot the correlation matrix using corrplot
+corrplot(cor_matrix, method = "color", type = "upper", order = "hclust")
+```
+
+
+
+```{r}
+
+library(ggplot2)
+
+# Assuming TPopulation1Jan and MedianAgePop are columns in your dataset
+ggplot(data, aes(x = TPopulation1Jan, y = MedianAgePop, color = TPopulation1Jan)) +
+  geom_point(size = 3, alpha = 0.7) +
+  scale_color_viridis_c() +  # You can choose a different color scale
+  labs(title = "Scatter Plot of Population vs. Median Age",
+       x = "Population",
+       y = "Median Age")
+
+
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(data, aes(x = LocTypeName, y = PopDensity, color = factor(LocTypeName))) +
+  geom_boxplot(
+    outlier.shape = NA,
+    notch = TRUE,
+    lwd = 0.5
+  ) +
+  labs(
+    x = "Location Type",
+    y = "Population Density",
+    title = "Population Density by Location Type",
+  ) +
+  theme_bw() +
+  scale_color_brewer(palette = "Dark2")+ ylim(c(0, 200))
+
+```
+Overall Trends:
+The box plot reveals a wide range of population densities across different location types.
+Certain types, like Development Groups and Income Groups, generally have higher population densities than others, such as SDG Regions and Subregions.
+Presence of outliers emphasizes the diversity, representing countries or subregions with notably different population density patterns compared to the median for their location type.
+
+
+```{r}
+library(ggplot2)
+
+world_data_filtered <- data %>%
+  filter(TPopulation1Jan > 1000000)
+
+# Create a histogram with colored bars
+ggplot(world_data_filtered, aes(x = TPopulation1Jan, fill = cut(TPopulation1Jan, breaks = 30))) +
+  geom_histogram(bins = 30, color = "black", alpha = 0.7) +
+  scale_fill_viridis_d() +  # You can choose a different color scale
+  labs(title = "Histogram of Countries with Population Over 1 Million",
+       x = "Population",
+       y = "Frequency")
+
+
+```
+```{r}
+prop.table(table(data$LocTypeName))
+```
+Overall Trends:
+The histogram portrays a broad spectrum of population sizes among countries with populations over 1 million.
+Many countries fall within the 1-2 million population range, while a distinct presence of very large populations is evident in the right tail.
+The distribution underscores the diversity in population sizes, ranging from smaller countries to those with substantial populations, such as China and India.
+
+
+
+```{r}
+
+library(ggplot2)
+
+# Assign a title to the plot
+my_title <- "Your Pie Chart Title"
+
+# Pie chart
+pie_chart <- ggplot(data, aes(x = "", fill = as.factor(LocTypeName))) +
+  geom_bar(width = 1, stat = "count") +
+  coord_polar(theta = "y") +
+  theme_minimal() +
+  labs(title = my_title) +
+  theme(axis.text = element_blank(), axis.title = element_blank(), panel.grid = element_blank())
+
+print(pie_chart)
+
+
+
+```
+
+
+
+```{r}
+
+
+# Fit a linear regression model
+lm_model <- lm(PopGrowthRate ~ NatChangeRT, data = data)
+
+# Create a scatter plot with the regression line using ggplot2
+library(ggplot2)
+ggplot(data, aes(x = NatChangeRT , y = PopGrowthRate)) +
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(title = "Linear Regression: NatChangeRT vs. PopGrowthRate",
+       x = "NatChangeRT",
+       y = "PopGrowthRate") +
+  theme_minimal()
+
+```
+Negative Correlation:
+The regression line slopes downward, demonstrating a negative correlation between population growth rate and natural change rate.
+Implication: As the natural change rate (births minus deaths) increases, the population growth rate decreases.
+Migration Influence:
+Net migration plays a role in shaping the relationship between natural change rate and population growth rate.
+Impact: Net out-migration of young adults from a country can result in a slower population growth rate, even when the natural change rate is positive.
+
+
+```{r}
+
+
+# List of variables to exclude from regression
+exclude_variables <- c("SortOrder", "LocTypeName", "Location","Variant")
+
+# List to store regression models
+formula <- as.formula(paste("PopGrowthRate ~", paste(setdiff(names(data), c("PopGrowthRate", exclude_variables)), collapse = " + ")))
+
+# Fit the multiple linear regression model
+lm_model <- lm(formula, data = data)
+
+# Print summary statistics of the regression model
+summary(lm_model)
+
+```
+Overall Model Significance:
+The regression model is highly significant (p-value < 2.2e-16), indicating that the included predictors collectively explain a large proportion of the variance in the response variable, PopGrowthRate.
+Coefficients and Significance:
+The coefficients for several predictors are significant, as indicated by the p-values.
+The intercept (7.046e-01) and Time (-5.558e-05) are both significant, suggesting that there is a temporal component influencing population growth.
+TPopulation1Jan, TPopulation1July, PopSexRatio, MedianAgePop, NatChangeRT, DoublingTime, Births1519, CBR, LE65, LE65Male, LE80, LE80Male, LE80Female, Q0040, Q0040Male, Q0040Female, NetMigrations, and CNMR are also significant predictors.
+Direction of Relationships:
+Time, TPopulation1Jan, PopSexRatio, MedianAgePop, DoublingTime, LE65, LE65Male, LE80, LE80Male, Q0040, Q0040Male, Q0040Female, and CNMR have negative coefficients, indicating a negative influence on population growth.
+TPopulation1July, NatChangeRT, Births1519, CBR, LEx, LExMale, LE15, LE15Male, LE15Female, LE80Female, Q1550, Q1550Male, Q1550Female, Q1560, and Q1560Male have positive coefficients, suggesting a positive influence.
+Multicollinearity and Singularities:
+Some predictors have singularities (NA values), suggesting potential multicollinearity issues. These include TPopulationFemale1July, PopChange, Deaths, CDR, and LBsurvivingAge1.
+Model Fit:
+The adjusted R-squared value is high (0.9984), indicating an excellent fit of the model to the data.
+The residual standard error is small (0.05383), suggest
+
+
+```{r}
+# Fit a multiple linear regression model
+lm_model <- lm(PopGrowthRate ~ Time + TPopulation1Jan + TPopulation1July + DoublingTime+  MedianAgePop + NatChangeRT + PopGrowthRate + DoublingTime + LE65 + LE65Male + LE80 + LE80Male + LE80Female + NetMigrations + CNMR, data = data)
+
+# Print summary statistics of the regression model
+summary(lm_model)
+```
+Significant Regression Model:
+The regression model is highly significant.
+Variance Explanation:
+The model explains a large proportion (99.84%) of the variance in PopGrowthRate.
+Key Predictors:
+The following factors are identified as key predictors:
+Time
+Initial population sizes (January and July)
+Doubling time
+Median age of the population
+Natural change rate
+Life expectancy at age 65 (LE65)
+Net migrations
+Crude net migration rate (CNMR)
+
+```{r}
+
+lm_model <- lm(PopGrowthRate ~ TPopulation1Jan + TPopulation1July + MedianAgePop + NatChangeRT + PopGrowthRate + DoublingTime + LE65+CNMR , data = data)
+
+# Print summary statistics of the regression model
+summary(lm_model)
+
+```
+High Significance:
+The regression model is highly significant.
+Variance Explanation:
+The model explains a large proportion (99.84%) of the variance in PopGrowthRate.
+Key Variables:
+The choice of variables in the model suggests that the following factors play significant roles in explaining population growth rates:
+Initial population size Age distribution Natural change rate Doubling time Net migration
+```{r}
+library(ggplot2)
+ggplot(data, aes(x = PopGrowthRate, y = MedianAgePop)) +
+  geom_point(color = "blue") +
+  labs(title = "Scatter Plot: PopGrowthRate vs. MedianAgePop",
+       x = "PopGrowthRate",
+       y = "MedianAgePop")
+```
+
+
+
+
+
+
+The population growth rate of the world is 20% between the period 1950 -2000
+It is forecasted that the population growth rate will decrease
+
+```{r}
+library(ggplot2)
+ggplot(data, aes(x = PopGrowthRate, y = CNMR)) +
+  geom_point(color = "blue") +
+  labs(title = "Scatter Plot: PopGrowthRate vs. CNMR",
+       x = "PopGrowthRate",
+       y = "CNMR")
+```
+
+The change in net migration rate (per 1000 population) was highest between 1950 – 2000 
+It is forecasted that till 2100 the CNMR will normalize
+
+```{r}
+library(ggplot2)
+ggplot(data, aes(x = Time, y = PopGrowthRate)) +
+  geom_point(color = "blue") +
+  labs(title = "Scatter Plot: PopGrowthRate vs. Time",
+       x = "Time",
+       y = "PopGrowthRate")
+```
+
+
+```{r}
+library(ggplot2)
+ggplot(data, aes(x = Time, y = CNMR)) +
+  geom_point(color = "blue") +
+  labs(title = "Scatter Plot: CNMR vs. Time",
+       x = "Time",
+       y = "CNMR")
+```
+
+
+```{r}
+data$poprate<-ifelse(data$PopGrowthRate>=2,1,0)
+data<- data %>% mutate(poprate = case_when(PopGrowthRate>=2 ~ 1, .default=0))
+head(data)
+#It is always a good practice to see the proportion of observations we have for each case
+table(data$poprate)
+prop.table(table(data$poprate))
+```
+
+```{r}
+
+library(caret)
+set.seed(1013, sample.kind = "Rejection")
+
+#split the dataset leaving 80% of observations in the training dataset and 20% in the test dataset:
+
+index <- createDataPartition(data$poprate, p = 0.7, list = FALSE)
+train_df <- data[index, ]
+test_df <- data[-index, ]
+
+
+# Now lets split our dataset into train and test:
+
+
+
+```
+
+
+```{r}
+library(rpart)
+library(rpart.plot)
+
+
+tree<-rpart(poprate ~ Time + TPopulation1Jan + TPopulation1July + DoublingTime+  MedianAgePop + NatChangeRT + PopGrowthRate + DoublingTime + LE65 + LE65Male + LE80 + LE80Male + LE80Female + NetMigrations + CNMR,data=train_df, method="class",cp=0.05)
+
+rpart.plot(tree,digits=-2)
+
+
+tree2<-rpart(poprate ~ TPopulation1Jan + TPopulation1July + MedianAgePop + NatChangeRT + PopGrowthRate + DoublingTime + LE65+CNMR,data=train_df, method="class",cp=0.05)
+
+rpart.plot(tree2,digits=-2)
+
+#Time + TPopulation1Jan + TPopulation1July + DoublingTime+  MedianAgePop + NatChangeRT + PopGrowthRate + DoublingTime + LE65 + LE65Male + LE80 + LE80Male + LE80Female + NetMigrations + CNMR
+#TPopulation1Jan + TPopulation1July + MedianAgePop + NatChangeRT + PopGrowthRate + DoublingTime + LE65+CNMR
+```
+Tree1
+40% of the total dataset has a population growth rate of less than 2%
+60% of the dataset has population growth rate of less than 2%
+40% of the dataset has population growth rate of more than 2%
+
+Tree2
+40% of the total dataset has doubling time greater than equal to 35 years
+When the doubling time is >= 35 years then the population growth rate is less than 2% which comprises of 60% of the data
+Otherwise the population growth rate is greater than 2% and that comprises 40% of the data
+
+
+
+
+
+```{r}
+test_df$pred = predict(tree, newdata = test_df, type="class")
+test_df$pred2 = predict(tree2, newdata = test_df, type="class")
+```
+
+
+```{r}
+library(caret)
+cat("1st tree (using earnings):")
+confusionMatrix(test_df$pred,as.factor(test_df$poprate))
+
+cat("2nd tree (using six splits):")
+confusionMatrix(test_df$pred2,as.factor(test_df$poprate))
+
+
+acc_tree <- sum(test_df$pred == test_df$poprate) / nrow(test_df)
+acc_tree2 <- sum(test_df$pred2 == test_df$poprate) / nrow(test_df)
+
+print(paste("Accuracy for tree:", round(acc_tree * 100, 2), "%"))
+print(paste("Accuracy for tree2:", round(acc_tree2 * 100, 2), "%"))
+```
+The population growth rate model exhibits remarkable accuracy, effectively classifying instances of both positive and negative growth rates.
+The model excels in precision, sensitivity, and specificity, showcasing its reliability in predicting and classifying population growth patterns.
+The high performance across metrics indicates the model's robustness in making accurate predictions related to population growth.
+It is crucial to acknowledge the exceptional performance while recognizing the need for further validation and consideration of potential biases in the dataset.
+These results underscore the model's effectiveness as a valuable tool for understanding and predicting population growth dynamics.
